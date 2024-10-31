@@ -1,15 +1,15 @@
-import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers';
+import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 
 type Env = {
 	// Add your bindings here, e.g. Workers KV, D1, Workers AI, etc.
-	MY_WORKFLOW: Workflow;
-};
+	MY_WORKFLOW: Workflow
+}
 
 // User-defined params passed to your workflow
 type Params = {
-	email: string;
-	metadata: Record<string, string>;
-};
+	email: string
+	metadata: Record<string, string>
+}
 
 export class MyWorkflow extends WorkflowEntrypoint<Env, Params> {
 	async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
@@ -30,59 +30,79 @@ export class MyWorkflow extends WorkflowEntrypoint<Env, Params> {
 					'notes_meeting_52.pdf',
 					'summary_fy24_draft.pdf',
 				],
-			};
-		});
+			}
+		})
 
 		const apiResponse = await step.do('some other step', async () => {
-			let resp = await fetch('https://api.cloudflare.com/client/v4/ips');
-			return await resp.json<any>();
-		});
+			let resp = await fetch('https://api.cloudflare.com/client/v4/ips')
+			return await resp.json<any>()
+		})
 
-		await step.sleep('wait on something', '1 minute');
+		let dt = new Date().toISOString()
+		let things: string[] = []
 
-		await step.do(
-			'make a call to write that could maybe, just might, fail',
-			// Define a retry strategy
-			{
-				retries: {
-					limit: 5,
-					delay: '5 second',
-					backoff: 'exponential',
-				},
-				timeout: '15 minutes',
-			},
-			async () => {
-				// Do stuff here, with access to the state from our previous steps
-				if (Math.random() > 0.5) {
-					throw new Error('API call to $STORAGE_SYSTEM failed');
-				}
-			},
-		);
+		await step.do(`things 1`, async () => {
+			things.push('hi from 1')
+		})
+
+		await step.sleep('wait on something', '10 seconds')
+
+		await step.do(`things 2`, async () => {
+			things.push('hi from 2')
+		})
+
+		await step.do(`things 3: ${JSON.stringify(things)}`, async () => {
+			console.log('value of things: ' + JSON.stringify(things))
+		})
+
+		// await step.do(
+		// 	'make a call to write that could maybe, just might, fail',
+		// 	// Define a retry strategy
+		// 	{
+		// 		retries: {
+		// 			limit: 5,
+		// 			delay: '5 second',
+		// 			backoff: 'exponential',
+		// 		},
+		// 		timeout: '15 minutes',
+		// 	},
+		// 	async () => {
+		// 		// Do stuff here, with access to the state from our previous steps
+		// 		if (Math.random() > 0.5) {
+		// 			throw new Error('API call to $STORAGE_SYSTEM failed')
+		// 		}
+		// 	}
+		// )
 	}
 }
 
 export default {
 	async fetch(req: Request, env: Env): Promise<Response> {
-		let url = new URL(req.url);
+		let url = new URL(req.url)
+		try {
+			await env.MY_WORKFLOW.get('foo')
+		} catch (e) {
+			console.error(e)
+		}
 
 		if (url.pathname.startsWith('/favicon')) {
-			return Response.json({}, { status: 404 });
+			return Response.json({}, { status: 404 })
 		}
 
 		// Get the status of an existing instance, if provided
-		let id = url.searchParams.get('instanceId');
+		let id = url.searchParams.get('instanceId')
 		if (id) {
-			let instance = await env.MY_WORKFLOW.get(id);
+			let instance = await env.MY_WORKFLOW.get(id)
 			return Response.json({
 				status: await instance.status(),
-			});
+			})
 		}
 
 		// Spawn a new instance and return the ID and status
-		let instance = await env.MY_WORKFLOW.create();
+		let instance = await env.MY_WORKFLOW.create()
 		return Response.json({
 			id: instance.id,
 			details: await instance.status(),
-		});
+		})
 	},
-};
+}
